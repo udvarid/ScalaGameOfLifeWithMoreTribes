@@ -28,7 +28,7 @@ object GameOfLifeLauncer extends JFXApp {
 
 
   val aThread = new Thread(() =>  {
-    val game = new GameOfLife(25, 4, canvas, size)
+    val game = new GameOfLife(50, 4, canvas, size)
     game.startGame
   })
 

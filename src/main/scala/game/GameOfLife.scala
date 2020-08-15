@@ -3,13 +3,14 @@ package game
 import scalafx.scene.canvas.Canvas
 import scalafx.scene.paint.Color
 
+import scala.+:
 import scala.annotation.tailrec
 import scala.util.Random
 
 class GameOfLife(initCells: Int, tribes: Int, canvas: Canvas, size: Int) {
 
   private val tribeOfficial = tribes.min(4).max(1)
-  private val cells: Set[Cell] = fillUpCells
+  private var cells: Set[Cell] = fillUpCells
 
   def fillUpCells: Set[Cell] = {
 
@@ -37,72 +38,80 @@ class GameOfLife(initCells: Int, tribes: Int, canvas: Canvas, size: Int) {
     case 4 => Color.Purple
   }
 
-  val giveColor: Cell => Color = a => if (a.live) giveTribeColor(a.tribe) else Color.White
-
-  val giveFold: PartialFunction[Boolean, Int] = {
-    case true => 10
-    case false => 11
-  }
-
-  private def drawCells(cellsToDraw: Set[Cell]): Unit = {
+  private def drawCells(newBurns: Set[Cell]): Unit = {
     val gc = canvas.graphicsContext2D
-    cellsToDraw.filter(c => c.newBorn || !c.live)
-      .foreach(c => {
-        gc.fill = giveColor(c)
-        val fold = giveFold(c.live)
-        if (c.tribe == 1 || c.tribe == 2) gc.fillOval(c.x * 25 + 7, c.y * 25 + 7, fold, fold)
-        else gc.fillRect(c.x * 25 + 7, c.y * 25 + 7, fold, fold)
-        if (c.newBorn) c.newBorn = false
-      })
-  }
-
-  implicit class PimpMyInteger(number: Int) {
-    def isDying: Boolean = number < 2 || number > 3
-    def canBorn: Boolean = number == 3
-    def isInside: Boolean = number >= 0 && number < size / 25
-  }
-
-  def passAway(workingCells: Set[Cell]): Unit = {
-    workingCells.foreach(c => {
-      if (workingCells.count(c2 => c2 ~ c).isDying) c.diePlease()
+    newBurns.foreach(c => {
+      gc.fill = giveTribeColor(c.tribe)
+      val fold = 10
+      if (c.tribe == 1 || c.tribe == 2) gc.fillOval(c.x * 25 + 7, c.y * 25 + 7, fold, fold)
+      else gc.fillRect(c.x * 25 + 7, c.y * 25 + 7, fold, fold)
     })
   }
 
-  def newBurnAdded(workingCells: Set[Cell]): Set[Cell] = {
-
-    val newBurns = workingCells.flatMap(c => (!c).filter(cf => cf.x.isInside && cf.y.isInside))
-
-    @tailrec
-    def selectNewBurns(newBurnCells: Set[Cell], livingCells: Set[Cell]): Set[Cell] = {
-      if (newBurnCells.isEmpty) livingCells
-      else {
-        if (livingCells.count(c2 => c2 ~ newBurnCells.head).canBorn)
-          selectNewBurns(newBurnCells.toList.tail.toSet, livingCells + newBurnCells.head)
-        else
-          selectNewBurns(newBurnCells.toList.tail.toSet, livingCells)
-      }
-    }
-
-    selectNewBurns(newBurns.diff(workingCells), workingCells)
-
+  private def clearDeadCells(corps: Set[Cell]): Unit = {
+    val gc = canvas.graphicsContext2D
+    corps.foreach(c => {
+      gc.fill = Color.White
+      val fold = 11
+      if (c.tribe == 1 || c.tribe == 2) gc.fillOval(c.x * 25 + 7, c.y * 25 + 7, fold, fold)
+      else gc.fillRect(c.x * 25 + 7, c.y * 25 + 7, fold, fold)
+    })
   }
+
+
+  implicit class PimpMyInteger(number: Int) {
+    def isDying: Boolean = number < 2 || number > 3
+
+    def canBorn: Boolean = number == 3
+
+    def isInside: Boolean = number >= 0 && number < size / 25
+  }
+
 
   def startGame(): Unit = {
     drawCells(cells)
 
     @tailrec
-    def nextRound(workingCells: Set[Cell]): Unit = {
-      Thread.sleep(1500)
-      if (workingCells.isEmpty) return
+    def nextRound(): Unit = {
+      Thread.sleep(500)
+      if (cells.isEmpty) return
       else {
-        passAway(workingCells)
-        val extendedCells = newBurnAdded(workingCells)
-        drawCells(extendedCells)
-        nextRound(extendedCells.filter(c => c.live))
+        //natural death of cells
+        val deadCells = cells.filter(c => cells.count(c2 => c2 ~ c).isDying)
+
+        //war effect
+
+        //potential newburns
+        val newBurns: Set[Cell] = cells.flatMap(c => (!c).filter(cf => cf.x.isInside && cf.y.isInside))
+        //filter newburns - already occupied
+        val newBurnsFilter1: Set[Cell] = newBurns.filter(nc => !cells.exists(c => c.x == nc.x && c.y == nc.y))
+        //filter newburns - different tribes on the same coordinate
+        val newBurnsFilter2: Set[Cell] = newBurnsFilter1
+          .filter(c => !newBurnsFilter1.exists(c2 => c.x == c2.x && c.y == c2.y && c.tribe != c2.tribe))
+        //filter newburns - not ready to live
+        val newBurnsFilter3: Set[Cell] = newBurnsFilter2
+          .filter(nc => cells.count(c => c ~ nc).canBorn)
+        drawCells(newBurnsFilter3)
+        //add newburns to cells
+        cells = cells ++ newBurnsFilter3
+
+        //kill the natural deads
+        clearDeadCells(deadCells)
+        cells = cells.diff(deadCells)
+
+
+        for (tribe <- 1 to cells.map(c => c.tribe).max) {
+          val numbOfCells = cells.count(c => c.tribe == tribe)
+          print(s"Tribe $tribe : $numbOfCells - ")
+        }
+        println()
+
+
+        nextRound()
       }
     }
 
-    nextRound(cells)
+    nextRound()
   }
 
 }
