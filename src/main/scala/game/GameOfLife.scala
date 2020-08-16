@@ -77,9 +77,48 @@ class GameOfLife(initCells: Int, tribes: Int, canvas: Canvas, size: Int) {
       if (cells.isEmpty) return
       else {
         //natural death of cells
-        val deadCells = cells.filter(c => cells.count(c2 => c2 ~ c).isDying)
+        val deadCells: Set[Cell] = cells.filter(c => cells.count(c2 => c2 ~ c).isDying)
 
         //war effect
+        var warCasualities: Set[Cell] = Set[Cell]()
+        cells.foreach(c => {
+          val conflictZones: Set[Cell] = cells.filter(c2 => c2 closeEnemy c) + c
+
+          if (conflictZones.nonEmpty) {
+            conflictZones.foreach(conflCell => {
+              cells.foreach(clearCell => clearCell.visited = false)
+
+              def findGroupStrength(checkThis: Cell, value: Int): Int = {
+                if (!checkThis.visited) {
+                  checkThis.visited = true
+
+                  val upCell: Option[Cell] = cells.find(fc => fc.x == checkThis.x + 1 && fc.y == checkThis.y && fc.tribe == checkThis.tribe)
+                  val downCell: Option[Cell] = cells.find(fc => fc.x == checkThis.x - 1 && fc.y == checkThis.y && fc.tribe == checkThis.tribe)
+                  val leftCell: Option[Cell] = cells.find(fc => fc.x == checkThis.x && fc.y == checkThis.y + 1 && fc.tribe == checkThis.tribe)
+                  val rightCell: Option[Cell] = cells.find(fc => fc.x == checkThis.x && fc.y == checkThis.y - 1 && fc.tribe == checkThis.tribe)
+
+                  val upValue: Int = if (upCell.isEmpty) value else findGroupStrength(upCell.get, value + 1)
+                  val downValue: Int = if (downCell.isEmpty) value else findGroupStrength(downCell.get, value + 1)
+                  val leftValue: Int = if (leftCell.isEmpty) value else findGroupStrength(leftCell.get, value + 1)
+                  val rightValue: Int = if (rightCell.isEmpty) value else findGroupStrength(rightCell.get, value + 1)
+
+                  upValue.max(downValue).max(leftValue).max(rightValue)
+
+                } else value
+              }
+              conflCell.value = findGroupStrength(conflCell, 1)
+            })
+            val maxValue = conflictZones.map(cellToValue => cellToValue.value).max
+            warCasualities = warCasualities ++ conflictZones.filter(cas => cas.value < maxValue)
+
+          }
+
+        })
+
+        if (warCasualities.nonEmpty) {
+          println(s"In this turn ${warCasualities.size} would be dead")
+          warCasualities.foreach(println)
+        }
 
         //potential newburns
         val newBurns: Set[Cell] = cells.flatMap(c => (!c).filter(cf => cf.x.isInside && cf.y.isInside))
@@ -98,6 +137,10 @@ class GameOfLife(initCells: Int, tribes: Int, canvas: Canvas, size: Int) {
         //kill the natural deads
         clearDeadCells(deadCells)
         cells = cells.diff(deadCells)
+
+        //kill the war deads
+        clearDeadCells(warCasualities)
+        cells = cells.diff(warCasualities)
 
 
         for (tribe <- 1 to cells.map(c => c.tribe).max) {
