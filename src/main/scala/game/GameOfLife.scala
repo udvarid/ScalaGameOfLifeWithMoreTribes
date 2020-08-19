@@ -82,9 +82,10 @@ class GameOfLife(initCells: Int, tribes: Int, canvas: Canvas, size: Int) {
         //war effect
         var warCasualities: Set[Cell] = Set[Cell]()
         cells.foreach(c => {
-          val conflictZones: Set[Cell] = cells.filter(c2 => c2 closeEnemy c) + c
+          var conflictZones: Set[Cell] = cells.filter(c2 => c2 closeEnemy c)
 
           if (conflictZones.nonEmpty) {
+            conflictZones = conflictZones + c
             conflictZones.foreach(conflCell => {
               cells.foreach(clearCell => clearCell.visited = false)
 
@@ -104,21 +105,16 @@ class GameOfLife(initCells: Int, tribes: Int, canvas: Canvas, size: Int) {
 
                   upValue.max(downValue).max(leftValue).max(rightValue)
 
-                } else value
+                } else value - 1
               }
               conflCell.value = findGroupStrength(conflCell, 1)
             })
-            val maxValue = conflictZones.map(cellToValue => cellToValue.value).max
+            val maxValue = conflictZones.map(_.value).max
             warCasualities = warCasualities ++ conflictZones.filter(cas => cas.value < maxValue)
 
           }
 
         })
-
-        if (warCasualities.nonEmpty) {
-          println(s"In this turn ${warCasualities.size} would be dead")
-          warCasualities.foreach(println)
-        }
 
         //potential newburns
         val newBurns: Set[Cell] = cells.flatMap(c => (!c).filter(cf => cf.x.isInside && cf.y.isInside))
