@@ -3,7 +3,6 @@ package game
 import scalafx.scene.canvas.Canvas
 import scalafx.scene.paint.Color
 
-import scala.+:
 import scala.annotation.tailrec
 import scala.util.Random
 
@@ -11,6 +10,8 @@ class GameOfLife(initCells: Int, tribes: Int, canvas: Canvas, size: Int) {
 
   private val tribeOfficial = tribes.min(4).max(1)
   private var cells: Set[Cell] = fillUpCells
+
+  private var canContinue: Boolean = true
 
   def fillUpCells: Set[Cell] = {
 
@@ -73,8 +74,8 @@ class GameOfLife(initCells: Int, tribes: Int, canvas: Canvas, size: Int) {
 
     @tailrec
     def nextRound(): Unit = {
-      Thread.sleep(500)
-      if (cells.isEmpty) return
+      Thread.sleep(250)
+      if (!canContinue) return
       else {
         //natural death of cells
         val deadCells: Set[Cell] = cells.filter(c => cells.count(c2 => c2 ~ c).isDying)
@@ -107,6 +108,7 @@ class GameOfLife(initCells: Int, tribes: Int, canvas: Canvas, size: Int) {
 
                 } else value - 1
               }
+
               conflCell.value = findGroupStrength(conflCell, 1)
             })
             val maxValue = conflictZones.map(_.value).max
@@ -120,13 +122,20 @@ class GameOfLife(initCells: Int, tribes: Int, canvas: Canvas, size: Int) {
         val newBurns: Set[Cell] = cells.flatMap(c => (!c).filter(cf => cf.x.isInside && cf.y.isInside))
         //filter newburns - already occupied
         val newBurnsFilter1: Set[Cell] = newBurns.filter(nc => !cells.exists(c => c.x == nc.x && c.y == nc.y))
+        //filter concurrent newburns
+        val concurNewburns: Set[Cell] = newBurnsFilter1
+          .filter(c => newBurnsFilter1.exists(c2 => c.x == c2.x && c.y == c2.y && c.tribe != c2.tribe))
+        val winnerBirths: Set[Cell] = concurNewburns
+          .filter(c => c.chanceOfBirth >= concurNewburns.filter(fc => fc.x == c.x && fc.y == c.y).map(mc => mc.chanceOfBirth).max)
+
         //filter newburns - different tribes on the same coordinate
         val newBurnsFilter2: Set[Cell] = newBurnsFilter1
-          .filter(c => !newBurnsFilter1.exists(c2 => c.x == c2.x && c.y == c2.y && c.tribe != c2.tribe))
+          .filter(c => !newBurnsFilter1.exists(c2 => c.x == c2.x && c.y == c2.y && c.tribe != c2.tribe)) ++ winnerBirths
+
         //filter newburns - not ready to live
         val newBurnsFilter3: Set[Cell] = newBurnsFilter2
           .filter(nc => cells.count(c => c ~ nc).canBorn)
-        drawCells(newBurnsFilter3)
+
         //add newburns to cells
         cells = cells ++ newBurnsFilter3
 
@@ -138,13 +147,21 @@ class GameOfLife(initCells: Int, tribes: Int, canvas: Canvas, size: Int) {
         clearDeadCells(warCasualities)
         cells = cells.diff(warCasualities)
 
+        drawCells(cells)
+
+        var numberOfNull: Int = 0
 
         for (tribe <- 1 to cells.map(c => c.tribe).max) {
           val numbOfCells = cells.count(c => c.tribe == tribe)
           print(s"Tribe $tribe : $numbOfCells - ")
+          if (numbOfCells == 0)
+            numberOfNull += 1
         }
         println()
 
+
+        if (cells.isEmpty || numberOfNull >= 3)
+          canContinue = false
 
         nextRound()
       }
